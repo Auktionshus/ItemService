@@ -2,11 +2,10 @@ using MongoDB.Bson.Serialization.Attributes;
 using System;
 using System.Collections.Generic;
 
-public class ImageRecord
+public class Bid
 {
     public Guid Id { get; set; }
-    public Uri Location { get; set; }
+    public string? Bidder { get; set; }
+    public decimal Amount { get; set; }
     public DateTime Date { get; set; }
-    public string Description { get; set; }
-    public string AddedBy { get; set; }
 }
