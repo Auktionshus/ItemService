@@ -60,7 +60,7 @@ namespace ItemService.Controllers
                     // Sendes til kø
                     channel.BasicPublish(
                         exchange: "topic_fleet",
-                        routingKey: "auctions.create",
+                        routingKey: "items.create",
                         basicProperties: null,
                         body: body
                     );
@@ -102,7 +102,7 @@ namespace ItemService.Controllers
 
             if (item == null)
             {
-                return NotFound($"Auction with Id {id} not found.");
+                return NotFound($"Item with Id {id} not found.");
             }
             return Ok(item);
         }
