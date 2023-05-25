@@ -40,6 +40,7 @@ namespace ItemService.Controllers
         {
             if (item != null)
             {
+                _logger.LogInformation("create item called");
                 try
                 {
                     // Opretter forbindelse til RabbitMQ
@@ -68,7 +69,7 @@ namespace ItemService.Controllers
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex.Message);
+                    _logger.LogInformation("error " + ex.Message);
                     return StatusCode(500);
                 }
                 return Ok(item);
