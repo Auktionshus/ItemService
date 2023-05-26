@@ -9,9 +9,9 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
+using MongoDB.Bson;
 using MongoDB.Driver;
-
-
+using MongoDB.Driver.GridFS;
 
 namespace ItemService.Controllers
 {
@@ -19,13 +19,16 @@ namespace ItemService.Controllers
     [ApiController]
     public class ItemController : ControllerBase
     {
+        private IGridFSBucket gridFS;
         private readonly ILogger<ItemController> _logger;
         private readonly string _hostName;
+        private readonly string _mongoDbConnectionString;
 
         public ItemController(ILogger<ItemController> logger, IConfiguration config)
         {
             _logger = logger;
             _hostName = config["HostnameRabbit"];
+            _mongoDbConnectionString = config["MongoDbConnectionString"];
             _logger.LogInformation($"Connection: {_hostName}");
         }
 
@@ -107,5 +110,35 @@ namespace ItemService.Controllers
             return Ok(item);
         }
 
+        [HttpPost("uploadImage/{id}"), DisableRequestSizeLimit]
+        public async Task<IActionResult> UploadImage(Guid id, IFormFile file)
+        {
+            MongoClient dbClient = new MongoClient(_mongoDbConnectionString);
+            var database = dbClient.GetDatabase("Item");
+            var collection = dbClient.GetDatabase("Item").GetCollection<Item>("Items");
+            gridFS = new GridFSBucket(database);
+
+            if (file == null || file.Length == 0)
+            {
+                return BadRequest("No file uploaded.");
+            }
+
+            var fileName = id.ToString() + Path.GetExtension(file.FileName);
+
+            var options = new GridFSUploadOptions
+            {
+                Metadata = new BsonDocument { { "itemId", id.ToString() } }
+            };
+
+            var imageStream = file.OpenReadStream();
+            var fileId = await gridFS.UploadFromStreamAsync(fileName, imageStream, options);
+            imageStream.Close();
+
+            var filter = Builders<Item>.Filter.Eq(item => item.Id, id);
+            var update = Builders<Item>.Update.Set(item => item.ImageFileId, fileId.ToString());
+
+            await collection.UpdateOneAsync(filter, update);
+            return Ok();
+        }
     }
 }
