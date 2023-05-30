@@ -39,7 +39,7 @@ namespace ItemService.Controllers
 
         [Authorize]
         [HttpGet]
-        public async Task<IActionResult> Get()
+        public async Task<IActionResult> GetAuth()
         {
             return Ok("You're authorized");
         }
