@@ -39,7 +39,7 @@ namespace ItemService.Controllers
 
         [Authorize]
         [HttpGet]
-        public async Task<IActionResult> Get()
+        public async Task<IActionResult> GetAuth()
         {
             return Ok("You're authorized");
         }
@@ -145,6 +145,19 @@ namespace ItemService.Controllers
 
             await collection.UpdateOneAsync(filter, update);
             return Ok();
+        }
+
+        [HttpGet("version")]
+        public IEnumerable<string> Get()
+        {
+            var properties = new List<string>();
+            var assembly = typeof(Program).Assembly;
+            foreach (var attribute in assembly.GetCustomAttributesData())
+            {
+                properties.Add($"{attribute.AttributeType.Name} - {attribute.ToString()}");
+            }
+            return properties;
+
         }
     }
 }
