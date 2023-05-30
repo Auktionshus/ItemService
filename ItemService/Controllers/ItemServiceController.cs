@@ -1,16 +1,10 @@
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Threading.Tasks;
-using System.Text.Json;
 using System.Text;
-using Microsoft.AspNetCore.Http;
+using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
-using RabbitMQ.Client;
-using RabbitMQ.Client.Events;
-using MongoDB.Bson;
+using Microsoft.AspNetCore.Authorization;
 using MongoDB.Driver;
+using RabbitMQ.Client;
+using MongoDB.Bson;
 using MongoDB.Driver.GridFS;
 
 namespace ItemService.Controllers
@@ -22,13 +16,18 @@ namespace ItemService.Controllers
         private IGridFSBucket gridFS;
         private readonly ILogger<ItemController> _logger;
         private readonly string _hostName;
+        private readonly string _secret;
+        private readonly string _issuer;
         private readonly string _mongoDbConnectionString;
 
         public ItemController(ILogger<ItemController> logger, IConfiguration config)
         {
-            _logger = logger;
-            _hostName = config["HostnameRabbit"];
             _mongoDbConnectionString = config["MongoDbConnectionString"];
+            _hostName = config["HostnameRabbit"];
+            _secret = config["Secret"];
+            _issuer = config["Issuer"];
+
+            _logger = logger;
             _logger.LogInformation($"Connection: {_hostName}");
         }
 
@@ -37,6 +36,13 @@ namespace ItemService.Controllers
 
         // Image storage path
         private readonly string _imagePath = "Images";
+
+        [Authorize]
+        [HttpGet]
+        public async Task<IActionResult> Get()
+        {
+            return Ok("You're authorized");
+        }
 
         [HttpPost("create")]
         public async Task<IActionResult> CreateItem(Item item)
