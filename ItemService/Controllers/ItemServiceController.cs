@@ -49,9 +49,46 @@ namespace ItemService.Controllers
         {
             try
             {
-                _logger.LogInformation($"Item with title: {model.Title} recieved");
-                if (model != null)
-                {
+                    _logger.LogInformation($"Item with title: {model.Title} recieved");
+                    if (model != null)
+                    {
+                        _logger.LogInformation("create item called");
+                        try
+                        {
+                            // Opretter forbindelse til RabbitMQ
+                            var factory = new ConnectionFactory { HostName = _hostName };
+
+                            using var connection = factory.CreateConnection();
+                            using var channel = connection.CreateModel();
+
+                            channel.ExchangeDeclare(
+                                exchange: "topic_fleet",
+                                type: ExchangeType.Topic
+                            );
+
+                            // Serialiseres til JSON
+                            string message = JsonSerializer.Serialize(model);
+
+                            // Konverteres til byte-array
+                            var body = Encoding.UTF8.GetBytes(message);
+
+                            // Sendes til kø
+                            channel.BasicPublish(
+                                exchange: "topic_fleet",
+                                routingKey: "items.create",
+                                basicProperties: null,
+                                body: body
+                            );
+
+                            _logger.LogInformation("Item created and sent to RabbitMQ");
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogInformation("error " + ex.Message);
+                            return StatusCode(500);
+                        }
+                        return Ok(model);
+
                     _logger.LogInformation("create item called");
                     try
                     {
@@ -78,6 +115,7 @@ namespace ItemService.Controllers
                         );
 
                         _logger.LogInformation("Item created and sent to RabbitMQ");
+
                     }
                     catch (Exception ex)
                     {
