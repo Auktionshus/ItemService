@@ -45,12 +45,12 @@ namespace ItemService.Controllers
         }
 
         [HttpPost("create")]
-        public async Task<IActionResult> CreateItem([FromBody] RegisterModel model)
+        public async Task<IActionResult> CreateItem([FromBody] Item model)
         {
             try
             {
                 {
-                    _logger.LogInformation($"Item with email: {model.Email} recieved");
+                    _logger.LogInformation($"Item with title: {model.Title} recieved");
                     if (model != null)
                     {
                         _logger.LogInformation("create item called");
@@ -62,7 +62,10 @@ namespace ItemService.Controllers
                             using var connection = factory.CreateConnection();
                             using var channel = connection.CreateModel();
 
-                            channel.ExchangeDeclare(exchange: "topic_fleet", type: ExchangeType.Topic);
+                            channel.ExchangeDeclare(
+                                exchange: "topic_fleet",
+                                type: ExchangeType.Topic
+                            );
 
                             // Serialiseres til JSON
                             string message = JsonSerializer.Serialize(model);
@@ -95,11 +98,11 @@ namespace ItemService.Controllers
             }
             catch
             {
-                _logger.LogInformation($"An error occurred while trying to create item with email: {model.Email}");
+                _logger.LogInformation($"An error occurred while trying to create item");
                 return BadRequest();
             }
-
         }
+
         [HttpGet("list")]
         public async Task<IActionResult> ListItems()
         {
@@ -170,9 +173,6 @@ namespace ItemService.Controllers
                 properties.Add($"{attribute.AttributeType.Name} - {attribute.ToString()}");
             }
             return properties;
-
         }
     }
-
-
 }
