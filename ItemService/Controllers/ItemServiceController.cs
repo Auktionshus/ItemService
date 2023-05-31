@@ -45,13 +45,13 @@ namespace ItemService.Controllers
         }
 
         [HttpPost("create")]
-        public async Task<IActionResult> CreateItem(Item item)
+        public async Task<IActionResult> CreateItem([FromBody] RegisterModel model)
         {
             try
             {
                 {
-                    _logger.LogInformation($"User with email: {model.Email} recieved");
-                    if (item != null)
+                    _logger.LogInformation($"Item with email: {model.Email} recieved");
+                    if (model != null)
                     {
                         _logger.LogInformation("create item called");
                         try
@@ -65,7 +65,7 @@ namespace ItemService.Controllers
                             channel.ExchangeDeclare(exchange: "topic_fleet", type: ExchangeType.Topic);
 
                             // Serialiseres til JSON
-                            string message = JsonSerializer.Serialize(item);
+                            string message = JsonSerializer.Serialize(model);
 
                             // Konverteres til byte-array
                             var body = Encoding.UTF8.GetBytes(message);
@@ -85,7 +85,7 @@ namespace ItemService.Controllers
                             _logger.LogInformation("error " + ex.Message);
                             return StatusCode(500);
                         }
-                        return Ok(item);
+                        return Ok(model);
                     }
                     else
                     {
@@ -98,80 +98,81 @@ namespace ItemService.Controllers
                 _logger.LogInformation($"An error occurred while trying to create item with email: {model.Email}");
                 return BadRequest();
             }
+
+        }
+        [HttpGet("list")]
+        public async Task<IActionResult> ListItems()
+        {
+            _logger.LogInformation("Geting ItemList");
+            MongoClient dbClient = new MongoClient(
+                "mongodb+srv://GroenOlsen:BhvQmiihJWiurl2V@auktionshusgo.yzctdhc.mongodb.net/?retryWrites=true&w=majority"
+            );
+            var collection = dbClient.GetDatabase("Items").GetCollection<Item>("Item");
+            var items = await collection.Find(_ => true).ToListAsync();
+            return Ok(items);
+        }
+
+        [HttpGet("item/{id}")]
+        public async Task<IActionResult> GetItem(Guid id)
+        {
+            MongoClient dbClient = new MongoClient(
+                "mongodb+srv://GroenOlsen:BhvQmiihJWiurl2V@auktionshusgo.yzctdhc.mongodb.net/?retryWrites=true&w=majority"
+            );
+            var collection = dbClient.GetDatabase("Items").GetCollection<Item>("Item");
+            Item item = await collection.Find(a => a.Id == id).FirstOrDefaultAsync();
+
+            if (item == null)
+            {
+                return NotFound($"Item with Id {id} not found.");
+            }
+            return Ok(item);
+        }
+
+        [HttpPost("uploadImage/{id}"), DisableRequestSizeLimit]
+        public async Task<IActionResult> UploadImage(Guid id, IFormFile file)
+        {
+            MongoClient dbClient = new MongoClient(_mongoDbConnectionString);
+            var database = dbClient.GetDatabase("Item");
+            var collection = dbClient.GetDatabase("Item").GetCollection<Item>("Items");
+            gridFS = new GridFSBucket(database);
+
+            if (file == null || file.Length == 0)
+            {
+                return BadRequest("No file uploaded.");
+            }
+
+            var fileName = id.ToString() + Path.GetExtension(file.FileName);
+
+            var options = new GridFSUploadOptions
+            {
+                Metadata = new BsonDocument { { "itemId", id.ToString() } }
+            };
+
+            var imageStream = file.OpenReadStream();
+            var fileId = await gridFS.UploadFromStreamAsync(fileName, imageStream, options);
+            imageStream.Close();
+
+            var filter = Builders<Item>.Filter.Eq(item => item.Id, id);
+            var update = Builders<Item>.Update.Set(item => item.ImageFileId, fileId.ToString());
+
+            await collection.UpdateOneAsync(filter, update);
+            return Ok();
+        }
+
+        [HttpGet("version")]
+        public IEnumerable<string> Get()
+        {
+            var properties = new List<string>();
+            var assembly = typeof(Program).Assembly;
+            foreach (var attribute in assembly.GetCustomAttributesData())
+            {
+                _logger.LogInformation("Tilføjer " + attribute.AttributeType.Name);
+                properties.Add($"{attribute.AttributeType.Name} - {attribute.ToString()}");
+            }
+            return properties;
+
         }
     }
 
-    [HttpGet("list")]
-    public async Task<IActionResult> ListItems()
-    {
-        _logger.LogInformation("Geting ItemList");
-        MongoClient dbClient = new MongoClient(
-            "mongodb+srv://GroenOlsen:BhvQmiihJWiurl2V@auktionshusgo.yzctdhc.mongodb.net/?retryWrites=true&w=majority"
-        );
-        var collection = dbClient.GetDatabase("Items").GetCollection<Item>("Item");
-        var items = await collection.Find(_ => true).ToListAsync();
-        return Ok(items);
-    }
 
-    [HttpGet("item/{id}")]
-    public async Task<IActionResult> GetItem(Guid id)
-    {
-        MongoClient dbClient = new MongoClient(
-            "mongodb+srv://GroenOlsen:BhvQmiihJWiurl2V@auktionshusgo.yzctdhc.mongodb.net/?retryWrites=true&w=majority"
-        );
-        var collection = dbClient.GetDatabase("Items").GetCollection<Item>("Item");
-        Item item = await collection.Find(a => a.Id == id).FirstOrDefaultAsync();
-
-        if (item == null)
-        {
-            return NotFound($"Item with Id {id} not found.");
-        }
-        return Ok(item);
-    }
-
-    [HttpPost("uploadImage/{id}"), DisableRequestSizeLimit]
-    public async Task<IActionResult> UploadImage(Guid id, IFormFile file)
-    {
-        MongoClient dbClient = new MongoClient(_mongoDbConnectionString);
-        var database = dbClient.GetDatabase("Item");
-        var collection = dbClient.GetDatabase("Item").GetCollection<Item>("Items");
-        gridFS = new GridFSBucket(database);
-
-        if (file == null || file.Length == 0)
-        {
-            return BadRequest("No file uploaded.");
-        }
-
-        var fileName = id.ToString() + Path.GetExtension(file.FileName);
-
-        var options = new GridFSUploadOptions
-        {
-            Metadata = new BsonDocument { { "itemId", id.ToString() } }
-        };
-
-        var imageStream = file.OpenReadStream();
-        var fileId = await gridFS.UploadFromStreamAsync(fileName, imageStream, options);
-        imageStream.Close();
-
-        var filter = Builders<Item>.Filter.Eq(item => item.Id, id);
-        var update = Builders<Item>.Update.Set(item => item.ImageFileId, fileId.ToString());
-
-        await collection.UpdateOneAsync(filter, update);
-        return Ok();
-    }
-
-    [HttpGet("version")]
-    public IEnumerable<string> Get()
-    {
-        var properties = new List<string>();
-        var assembly = typeof(Program).Assembly;
-        foreach (var attribute in assembly.GetCustomAttributesData())
-        {
-            _logger.LogInformation("Tilføjer " + attribute.AttributeType.Name);
-            properties.Add($"{attribute.AttributeType.Name} - {attribute.ToString()}");
-        }
-        return properties;
-
-    }
 }
-    }
