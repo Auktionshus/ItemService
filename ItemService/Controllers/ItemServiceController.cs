@@ -44,6 +44,7 @@ namespace ItemService.Controllers
             return Ok("You're authorized");
         }
 
+        [Authorize]
         [HttpPost("create")]
         public async Task<IActionResult> CreateItem([FromBody] ItemDTO model)
         {
