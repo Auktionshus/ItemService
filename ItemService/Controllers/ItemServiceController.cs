@@ -6,6 +6,10 @@ using MongoDB.Driver;
 using RabbitMQ.Client;
 using MongoDB.Bson;
 using MongoDB.Driver.GridFS;
+using VaultSharp;
+using VaultSharp.V1.AuthMethods.Token;
+using VaultSharp.V1.AuthMethods;
+using VaultSharp.V1.Commons;
 
 namespace ItemService.Controllers
 {
@@ -20,15 +24,28 @@ namespace ItemService.Controllers
         private readonly string _issuer;
         private readonly string _mongoDbConnectionString;
 
-        public ItemController(ILogger<ItemController> logger, IConfiguration config)
+        public ItemController(
+            ILogger<ItemController> logger,
+            Environment secrets,
+            IConfiguration config
+        )
         {
-            _mongoDbConnectionString = config["MongoDbConnectionString"];
-            _hostName = config["HostnameRabbit"];
-            _secret = config["Secret"];
-            _issuer = config["Issuer"];
+            try
+            {
+                _hostName = config["HostnameRabbit"];
+                _secret = secrets.dictionary["Secret"];
+                _issuer = secrets.dictionary["Issuer"];
+                _mongoDbConnectionString = secrets.dictionary["ConnectionString"];
 
-            _logger = logger;
-            _logger.LogInformation($"Connection: {_hostName}");
+                _logger = logger;
+                _logger.LogInformation($"Secret: {_secret}");
+                _logger.LogInformation($"Issuer: {_issuer}");
+                _logger.LogInformation($"MongoDbConnectionString: {_mongoDbConnectionString}");
+            }
+            catch (Exception e)
+            {
+                _logger.LogError($"Error getting environment variables{e.Message}");
+            }
         }
 
         // Placeholder for the auction data storage
@@ -44,6 +61,7 @@ namespace ItemService.Controllers
             return Ok("You're authorized");
         }
 
+        [Authorize]
         [HttpPost("create")]
         public async Task<IActionResult> CreateItem([FromBody] ItemDTO model)
         {
