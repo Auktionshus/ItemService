@@ -24,10 +24,15 @@ namespace ItemService.Controllers
         private readonly string _issuer;
         private readonly string _mongoDbConnectionString;
 
-        public ItemController(ILogger<ItemController> logger, Environment secrets)
+        public ItemController(
+            ILogger<ItemController> logger,
+            Environment secrets,
+            IConfiguration config
+        )
         {
             try
             {
+                _hostName = config["HostnameRabbit"];
                 _secret = secrets.dictionary["Secret"];
                 _issuer = secrets.dictionary["Issuer"];
                 _mongoDbConnectionString = secrets.dictionary["ConnectionString"];
