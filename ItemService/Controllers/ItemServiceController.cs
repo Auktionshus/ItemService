@@ -6,10 +6,6 @@ using MongoDB.Driver;
 using RabbitMQ.Client;
 using MongoDB.Bson;
 using MongoDB.Driver.GridFS;
-using VaultSharp;
-using VaultSharp.V1.AuthMethods.Token;
-using VaultSharp.V1.AuthMethods;
-using VaultSharp.V1.Commons;
 
 namespace ItemService.Controllers
 {
@@ -23,6 +19,8 @@ namespace ItemService.Controllers
         private readonly string _secret;
         private readonly string _issuer;
         private readonly string _mongoDbConnectionString;
+
+        private MongoClient dbClient;
 
         public ItemController(
             ILogger<ItemController> logger,
@@ -41,6 +39,9 @@ namespace ItemService.Controllers
                 _logger.LogInformation($"Secret: {_secret}");
                 _logger.LogInformation($"Issuer: {_issuer}");
                 _logger.LogInformation($"MongoDbConnectionString: {_mongoDbConnectionString}");
+
+                // Connect to MongoDB
+                dbClient = new MongoClient(_mongoDbConnectionString);
             }
             catch (Exception e)
             {
@@ -48,34 +49,47 @@ namespace ItemService.Controllers
             }
         }
 
-        // Placeholder for the auction data storage
-        private static readonly List<Item> Items = new List<Item>();
-
-        // Image storage path
-        private readonly string _imagePath = "Images";
-
-        [Authorize]
-        [HttpGet]
-        public async Task<IActionResult> GetAuth()
-        {
-            return Ok("You're authorized");
-        }
-
+        /// <summary>
+        /// Creates an item
+        /// </summary>
+        /// <param name="item">ItemDTO</param>
+        /// <returns>The created item</returns>
         [Authorize]
         [HttpPost("create")]
-        public async Task<IActionResult> CreateItem([FromBody] ItemDTO model)
+        public async Task<IActionResult> CreateItem([FromBody] ItemDTO item)
         {
-            try
+            _logger.LogInformation(
+                $"Item with title: {item.Title} recieved, from user: {item.Seller}"
+            );
+            if (item != null)
             {
-                _logger.LogInformation(
-                    $"Item with title: {model.Title} recieved, from user: {model.Seller}"
-                );
-                if (model != null)
+                _logger.LogInformation("create item called");
+                User user = null;
+                try
                 {
-                    _logger.LogInformation("create item called");
+                    var userCollection = dbClient.GetDatabase("User").GetCollection<User>("Users");
+                    user = userCollection.Find(u => u.Id == item.Seller).FirstOrDefault();
+                    _logger.LogInformation($" [x] Received user with id: {user.Id}");
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError($"An error occurred while querying the user collection: {ex}");
+                }
+                if (user == null)
+                {
+                    _logger.LogInformation("User not found");
+                    return BadRequest("User not found");
+                }
+                else if (
+                    item.CategoryCode == "CH"
+                    || item.CategoryCode == "LA"
+                    || item.CategoryCode == "CO"
+                    || item.CategoryCode == "RI"
+                )
+                {
                     try
                     {
-                        // Opretter forbindelse til RabbitMQ
+                        // Connect to RabbitMQ
                         var factory = new ConnectionFactory { HostName = _hostName };
 
                         using var connection = factory.CreateConnection();
@@ -83,13 +97,13 @@ namespace ItemService.Controllers
 
                         channel.ExchangeDeclare(exchange: "topic_fleet", type: ExchangeType.Topic);
 
-                        // Serialiseres til JSON
-                        string message = JsonSerializer.Serialize(model);
+                        // Serialize to JSON
+                        string message = JsonSerializer.Serialize(item);
 
-                        // Konverteres til byte-array
+                        // Convert to byte-array
                         var body = Encoding.UTF8.GetBytes(message);
 
-                        // Sendes til kø
+                        // Send to queue
                         channel.BasicPublish(
                             exchange: "topic_fleet",
                             routingKey: "items.create",
@@ -104,72 +118,41 @@ namespace ItemService.Controllers
                         _logger.LogInformation("error " + ex.Message);
                         return StatusCode(500);
                     }
-                    return Ok(model);
-
-                    _logger.LogInformation("create item called");
-                    try
-                    {
-                        // Opretter forbindelse til RabbitMQ
-                        var factory = new ConnectionFactory { HostName = _hostName };
-
-                        using var connection = factory.CreateConnection();
-                        using var channel = connection.CreateModel();
-
-                        channel.ExchangeDeclare(exchange: "topic_fleet", type: ExchangeType.Topic);
-
-                        // Serialiseres til JSON
-                        string message = JsonSerializer.Serialize(model);
-
-                        // Konverteres til byte-array
-                        var body = Encoding.UTF8.GetBytes(message);
-
-                        // Sendes til kø
-                        channel.BasicPublish(
-                            exchange: "topic_fleet",
-                            routingKey: "items.create",
-                            basicProperties: null,
-                            body: body
-                        );
-
-                        _logger.LogInformation("Item created and sent to RabbitMQ");
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogInformation("error " + ex.Message);
-                        return StatusCode(500);
-                    }
-                    return Ok(model);
+                    return Ok(item);
                 }
                 else
                 {
-                    return BadRequest("Item object is null");
+                    _logger.LogInformation("CategoryCode: " + item.CategoryCode + " not valid");
+                    return BadRequest("CategoryCode not valid");
                 }
             }
-            catch
+            else
             {
-                _logger.LogInformation($"An error occurred while trying to create item");
-                return BadRequest();
+                return BadRequest("Item object is null");
             }
         }
 
+        /// <summary>
+        /// Lists all items
+        /// </summary>
+        /// <returns>A list of items</returns>
         [HttpGet("list")]
         public async Task<IActionResult> ListItems()
         {
             _logger.LogInformation("Geting ItemList");
-            MongoClient dbClient = new MongoClient(
-                "mongodb+srv://GroenOlsen:BhvQmiihJWiurl2V@auktionshusgo.yzctdhc.mongodb.net/?retryWrites=true&w=majority"
-            );
             var collection = dbClient.GetDatabase("Items").GetCollection<Item>("Item");
             var items = await collection.Find(_ => true).ToListAsync();
             return Ok(items);
         }
 
-        [HttpGet("item/{id}")]
+        /// <summary>
+        /// Gets item from id
+        /// </summary>
+        /// <param name="id">Item id</param>
+        /// <returns>An item</returns>
+        [HttpGet("{id}")]
         public async Task<IActionResult> GetItem(Guid id)
         {
-            MongoClient dbClient = new MongoClient(
-                "mongodb+srv://GroenOlsen:BhvQmiihJWiurl2V@auktionshusgo.yzctdhc.mongodb.net/?retryWrites=true&w=majority"
-            );
             var collection = dbClient.GetDatabase("Items").GetCollection<Item>("Item");
             Item item = await collection.Find(a => a.Id == id).FirstOrDefaultAsync();
 
@@ -180,10 +163,15 @@ namespace ItemService.Controllers
             return Ok(item);
         }
 
+        /// <summary>
+        /// Creates an image for an item
+        /// </summary>
+        /// <param name="id">Item id</param>
+        /// <param name="file">Image file</param>
+        /// <returns>Ok</returns>
         [HttpPost("uploadImage/{id}"), DisableRequestSizeLimit]
         public async Task<IActionResult> UploadImage(Guid id, IFormFile file)
         {
-            MongoClient dbClient = new MongoClient(_mongoDbConnectionString);
             var database = dbClient.GetDatabase("Item");
             var collection = dbClient.GetDatabase("Item").GetCollection<Item>("Items");
             gridFS = new GridFSBucket(database);
@@ -211,6 +199,10 @@ namespace ItemService.Controllers
             return Ok();
         }
 
+        /// <summary>
+        /// Gets the version information of the service
+        /// </summary>
+        /// <returns>A list of version information</returns>
         [HttpGet("version")]
         public IEnumerable<string> Get()
         {
