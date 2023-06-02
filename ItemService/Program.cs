@@ -104,7 +104,7 @@ try
 
     app.UseHttpsRedirection();
 
-    app.UseAuthentication(); // Tilføj denne linje for at sikre at middleware kører
+    app.UseAuthentication();
     app.UseAuthorization();
 
     app.MapControllers();
