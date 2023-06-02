@@ -98,7 +98,7 @@ namespace ItemService.Controllers
                         channel.ExchangeDeclare(exchange: "topic_fleet", type: ExchangeType.Topic);
 
                         // Serialize to JSON
-                        string message = JsonSerializer.Serialize(model);
+                        string message = JsonSerializer.Serialize(item);
 
                         // Convert to byte-array
                         var body = Encoding.UTF8.GetBytes(message);
@@ -118,7 +118,7 @@ namespace ItemService.Controllers
                         _logger.LogInformation("error " + ex.Message);
                         return StatusCode(500);
                     }
-                    return Ok(model);
+                    return Ok(item);
                 }
                 else
                 {
